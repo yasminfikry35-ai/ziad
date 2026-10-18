@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Admin</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b0b0b;color:#eee;font-family:system-ui,-apple-system,'Segoe UI',Tahoma,sans-serif;padding:16px 16px 110px;max-width:760px;margin-inline:auto}
+h2{margin:28px 0 12px;font-size:18px;color:#c8ff3d}
+input,textarea,select{width:100%;background:#161616;border:1px solid #2a2a2a;color:#eee;border-radius:10px;padding:12px;font:inherit;margin-bottom:10px}
+label{font-size:13px;color:#999;display:block;margin-bottom:4px}
+button{background:#c8ff3d;color:#000;border:0;border-radius:10px;padding:12px 18px;font:inherit;font-weight:700;cursor:pointer}
+button.g{background:#222;color:#eee;padding:8px 12px}
+.row{display:flex;gap:8px;align-items:center;background:#131313;border:1px solid #222;border-radius:12px;padding:8px;margin-bottom:8px}
+.row img,.row video{width:64px;height:64px;object-fit:cover;border-radius:8px;background:#222;flex:none}
+.row b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.bar{position:fixed;inset:auto 0 0;background:#000d;backdrop-filter:blur(10px);padding:12px 16px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px;justify-content:center}
+#msg{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#222;padding:10px 18px;border-radius:99px;display:none;z-index:9}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}small{color:#777}
+</style>
+</head>
+<body>
+<div id="msg"></div>
+<h1 style="font-size:22px">لوحة التحكم</h1>
+<div id="login">
+  <p><small>مرة واحدة بس. بيتحفظوا على جهازك فقط (localStorage). الـ Token: GitHub → Settings → Developer settings → Fine-grained tokens → صلاحية Contents: Read and write على الـ repo ده بس.</small></p>
+  <label>GitHub username</label><input id="o" dir="ltr">
+  <label>Repository name</label><input id="r" dir="ltr">
+  <label>Branch</label><input id="b" dir="ltr" value="main">
+  <label>Token</label><input id="t" type="password" dir="ltr">
+  <button onclick="connect()">دخول</button>
+</div>
+<div id="app" style="display:none" dir="rtl">
+  <h2>البيانات الأساسية</h2><div id="pf"></div>
+  <h2>الأدوات (فاصلة بينهم)</h2><input id="tools" dir="ltr">
+  <h2>الخدمات (فاصلة بينهم)</h2><input id="svc" dir="ltr">
+  <h2>إضافة شغل جديد</h2>
+  <div class="two"><div><label>العنوان</label><input id="nt"></div><div><label>التصنيف</label><input id="nc" placeholder="Branding"></div></div>
+  <label>النوع</label><select id="ny"><option value="image">صورة</option><option value="video">فيديو (ملف MP4)</option><option value="youtube">لينك YouTube</option></select>
+  <div id="fw"><label>اختار الملف</label><input type="file" id="nf" accept="image/*,video/mp4"></div>
+  <div id="uw" style="display:none"><label>لينك YouTube</label><input id="nu" dir="ltr"></div>
+  <button onclick="addWork()">إضافة</button>
+  <p><small>الفيديو الأفضل يكون أقل من 40MB. للفيديوهات الكبيرة استخدم لينك YouTube (Unlisted).</small></p>
+  <h2>الأعمال</h2><div id="list"></div>
+</div>
+<div class="bar" id="bar" style="display:none"><button onclick="save()">💾 حفظ ونشر</button><button class="g" onclick="logout()">خروج</button></div>
+<script>
+const $=s=>document.getElementById(s),F=['name','role','heroTitle','heroAccent','tagline','about','photo','email','whatsapp','instagram','behance'];
+let D,sha,C={};const api=(p,o={})=>fetch(`https://api.github.com/repos/${C.o}/${C.r}/contents/${p}`+(o.method?'':`?ref=${C.b}&_=${Date.now()}`),{...o,headers:{Authorization:'Bearer '+C.t,Accept:'application/vnd.github+json'}}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.message);return j});
+const toast=m=>{const e=$('msg');e.textContent=m;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',3500)};
+const u8=s=>btoa(unescape(encodeURIComponent(s)));
+function logout(){localStorage.removeItem('adm');location.reload()}
+async function connect(){C={o:$('o').value.trim(),r:$('r').value.trim(),b:$('b').value.trim()||'main',t:$('t').value.trim()};
+  try{const j=await api('data.json');sha=j.sha;D=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,'')))));localStorage.setItem('adm',JSON.stringify(C));show()}catch(e){toast('فشل الدخول: '+e.message)}}
+function show(){$('login').style.display='none';$('app').style.display='block';$('bar').style.display='flex';
+  $('pf').innerHTML=F.map(k=>`<label>${k}</label>${k==='about'?`<textarea id="p_${k}" rows="4"></textarea>`:`<input id="p_${k}" dir="auto">`}`).join('');
+  F.forEach(k=>$('p_'+k).value=D.profile[k]||'');$('tools').value=D.tools.join(', ');$('svc').value=D.services.join(', ');list()}
+function list(){$('list').innerHTML='';D.works.forEach((w,i)=>{const yid=(w.src.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/)||[])[1];
+  const th=w.type==='image'?`<img src="${w.src}">`:w.type==='youtube'?`<img src="https://img.youtube.com/vi/${yid}/default.jpg">`:`<video src="${w.src}#t=0.1" muted preload="metadata"></video>`;
+  const d=document.createElement('div');d.className='row';d.innerHTML=th+`<b></b><button class="g" data-a="u">↑</button><button class="g" data-a="d">↓</button><button class="g" data-a="x">🗑</button>`;
+  d.querySelector('b').textContent=(w.title||'بدون عنوان')+' · '+(w.cat||'');
+  d.onclick=e=>{const a=e.target.dataset.a;if(!a)return;if(a==='x'){if(!confirm('حذف؟'))return;D.works.splice(i,1)}else{const j=a==='u'?i-1:i+1;if(j<0||j>=D.works.length)return;[D.works[i],D.works[j]]=[D.works[j],D.works[i]]}list()};$('list').append(d)})}
+$('ny').onchange=e=>{const y=e.target.value==='youtube';$('fw').style.display=y?'none':'block';$('uw').style.display=y?'block':'none'};
+const b64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
+async function addWork(){const type=$('ny').value;let src;
+  try{if(type==='youtube'){src=$('nu').value.trim();if(!src)return toast('حط اللينك')}
+  else{const f=$('nf').files[0];if(!f)return toast('اختار ملف');toast('جاري الرفع...');const name='assets/'+Date.now()+'-'+f.name.replace(/[^\w.-]/g,'_');
+    await api(name,{method:'PUT',body:JSON.stringify({message:'upload '+name,content:await b64(f),branch:C.b})});src=name}
+  D.works.unshift({id:'w'+Date.now(),type,src,title:$('nt').value,cat:$('nc').value});list();toast('اتضافت — اضغط حفظ ونشر');$('nf').value=$('nu').value=$('nt').value=''}catch(e){toast('خطأ: '+e.message)}}
+async function save(){F.forEach(k=>D.profile[k]=$('p_'+k).value.trim());const sp=v=>v.split(',').map(s=>s.trim()).filter(Boolean);D.tools=sp($('tools').value);D.services=sp($('svc').value);
+  try{toast('جاري الحفظ...');const j=await api('data.json',{method:'PUT',body:JSON.stringify({message:'update portfolio',content:u8(JSON.stringify(D,null,2)),sha,branch:C.b})});sha=j.content.sha;toast('✅ اتنشر — استنى دقيقة ويظهر على الموقع')}catch(e){toast('خطأ: '+e.message)}}
+try{const s=JSON.parse(localStorage.getItem('adm'));if(s){C=s;$('o').value=s.o;$('r').value=s.r;$('b').value=s.b;$('t').value=s.t;connect()}}catch(e){}
+</script>
+</body>
+</html>
